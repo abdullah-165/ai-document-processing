@@ -9,11 +9,21 @@ import numpy as np
 # ✅ If Tesseract is installed, set its path here (Windows default path)
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
+
+# ----------- Utility: Save Text to File -----------
+def save_to_file(text, filename="output.txt"):
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(text)
+
+
 # ----------- 1️⃣ Extract text from an image using OCR -----------
 def extract_text_from_image(image_path):
     img = Image.open(image_path)
     text = pytesseract.image_to_string(img)
-    return clean_text(text)
+    text = clean_text(text)
+    text = limit_words(text, 300)
+    save_to_file(text, "image_output.txt")
+    return text
 
 # ----------- 2️⃣ Extract text from a PDF -----------
 def extract_text_from_pdf(pdf_path):
@@ -21,19 +31,40 @@ def extract_text_from_pdf(pdf_path):
     text = ""
     for page in pdf_document:
         text += page.get_text()
-    return clean_text(text)
+    text = clean_text(text)
+    text = limit_words(text, 300)
+    save_to_file(text, "pdf_output.txt")
+    return text
 
 # ----------- 3️⃣ Extract text from a webpage -----------
 def extract_text_from_webpage(url):
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, "html.parser")
-    text = soup.get_text(separator=" ")
-    return clean_text(text)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    }
+    try:
+        resp = requests.get(url, headers=headers, timeout=60)
+        resp.raise_for_status()
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        text = soup.get_text(separator=" ")
+        text = clean_text(text)
+        text = limit_words(text, 300)
+        save_to_file(text, "web_output.txt")
+        return text
+    except Exception as e:
+        print(f"❌ Error fetching webpage: {e}")
+        return ""
+
 
 # ----------- 🧹 Clean text -----------
 def clean_text(text):
     text = re.sub(r"\s+", " ", text)  # Remove extra spaces/newlines
     return text.strip()
+
+# ----------- 📏 Limit to 300 words -----------
+def limit_words(text, max_words=300):
+    words = text.split()
+    return " ".join(words[:max_words])
 
 # ----------- 📏 Word Statistics -----------
 def analyze_word_stats(text):
@@ -47,28 +78,25 @@ def analyze_word_stats(text):
     }
 
 
+# ----------- 📝 Grammar Check (Fixed) -----------
 def check_grammar(text):
     url = "https://api.languagetool.org/v2/check"
     payload = {"text": text, "language": "en-US"}
-    
-    try:
-        response = requests.post(url, data=payload, timeout=10)  # 10 sec timeout
-        response.raise_for_status()
-        result = response.json()
+    response = requests.post(url, data=payload)
+    result = response.json()
 
-        print("\nGrammar & Spelling Issues Found:")
-        for match in result["matches"]:
-            print(f"- {match['message']}")
-            print(f"  Problem: '{text[match['offset']:match['offset']+match['length']]}'")
-            print(f"  Suggestion: {', '.join(match['replacements'][:3])}\n")
-        return result
-    
-    except requests.exceptions.Timeout:
-        print("❌ Error: Connection to LanguageTool timed out. Please check your internet or try again later.")
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Error: {e}")
+    print("\nGrammar & Spelling Issues Found:")
+    for match in result.get("matches", []):
+        problem = text[match['offset']:match['offset']+match['length']]
+        # Extract up to 3 suggestion values (if available)
+        suggestions = [r['value'] for r in match.get('replacements', [])[:3]]
+        suggestions_text = ", ".join(suggestions) if suggestions else "No suggestion"
 
+        print(f"- {match['message']}")
+        print(f"  Problem: '{problem}'")
+        print(f"  Suggestion: {suggestions_text}\n")
 
+    return result
 
 
 # ----------- 🚀 TEST THE FUNCTIONS -----------
@@ -80,7 +108,7 @@ if __name__ == "__main__":
     img_stats = analyze_word_stats(img_text)
     print(f"Number of Words: {img_stats['number_of_words']}")
     print(f"Average Word Length: {img_stats['average_word_length']:.2f} characters")
-    check_grammar(img_text)  # ✅ Grammar check for image text
+    check_grammar(img_text)
 
     # 2️⃣ PDF
     print("\n===== PDF EXTRACTION =====")
@@ -89,7 +117,7 @@ if __name__ == "__main__":
     pdf_stats = analyze_word_stats(pdf_text)
     print(f"Number of Words: {pdf_stats['number_of_words']}")
     print(f"Average Word Length: {pdf_stats['average_word_length']:.2f} characters")
-    check_grammar(pdf_text)  # ✅ Grammar check for PDF text
+    check_grammar(pdf_text)
 
     # 3️⃣ Webpage
     print("\n===== WEBPAGE EXTRACTION =====")
@@ -98,5 +126,4 @@ if __name__ == "__main__":
     web_stats = analyze_word_stats(web_text)
     print(f"Number of Words: {web_stats['number_of_words']}")
     print(f"Average Word Length: {web_stats['average_word_length']:.2f} characters")
-    check_grammar(web_text)  # ✅ Grammar check for webpage text
-
+    check_grammar(web_text)
