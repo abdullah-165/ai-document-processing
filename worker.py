@@ -3,8 +3,8 @@ from celery import Celery
 from core import (
     extract_text_from_image,
     extract_text_from_pdf,
-    extract_text_from_web,
-    grammar_check,
+    extract_text_from_webpage,
+    check_grammar,
 )
 
 # Initialize Celery app
@@ -31,10 +31,10 @@ def process_pdf_task(file_path: str):
 @celery_app.task
 def process_web_task(url: str):
     """Process webpage and extract text."""
-    return extract_text_from_web(url)
+    return extract_text_from_webpage(url)
 
 
 @celery_app.task
 def process_grammar_task(text: str):
     """Check grammar of given text."""
-    return grammar_check(text)
+    return check_grammar(text)
